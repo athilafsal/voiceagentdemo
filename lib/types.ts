@@ -16,9 +16,15 @@ export interface PersonaCustomization {
 }
 
 export interface CallTranscript {
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'booking';
   content: string;
   timestamp: Date;
+  bookingStatus?: 'in_progress' | 'success' | 'failed';
+  bookingData?: {
+    customer_name?: string;
+    appointment_time?: string;
+    shop_name?: string;
+  };
 }
 
 export interface BookingData {

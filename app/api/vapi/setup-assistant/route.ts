@@ -10,7 +10,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { assistantId } = await request.json();
+    const body = await request.json().catch(() => ({}));
+    // Use assistantId from request body, or fall back to environment variable
+    const assistantId = body.assistantId || process.env.VAPI_ASSISTANT_ID;
+
+    if (!assistantId) {
+      return NextResponse.json(
+        { error: 'Assistant ID is required. Please set VAPI_ASSISTANT_ID in .env.local or provide it in the request.' },
+        { status: 400 }
+      );
+    }
 
     const result = await setupAssistant(assistantId);
 

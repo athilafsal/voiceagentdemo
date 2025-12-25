@@ -12,6 +12,7 @@ interface VapiContextType {
   mute: () => void;
   unmute: () => void;
   isMuted: boolean;
+  bookingInProgress: boolean;
 }
 
 const VapiContext = createContext<VapiContextType | undefined>(undefined);
@@ -34,6 +35,7 @@ export default function VapiProvider({ children, assistantId }: VapiProviderProp
   const [isCallActive, setIsCallActive] = useState(false);
   const [transcripts, setTranscripts] = useState<CallTranscript[]>([]);
   const [isMuted, setIsMuted] = useState(false);
+  const [bookingInProgress, setBookingInProgress] = useState(false);
 
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_VAPI_API_KEY;
@@ -82,17 +84,83 @@ export default function VapiProvider({ children, assistantId }: VapiProviderProp
       }
     };
 
-    const handleFunctionCall = (event: any) => {
+    const handleFunctionCall = async (event: any) => {
       if (event?.functionCall?.name === 'confirm_booking' || event?.name === 'confirm_booking') {
         const params = event.functionCall?.parameters || event.parameters || {};
+        const bookingData = {
+          customer_name: params.customer_name || params.customerName,
+          appointment_time: params.appointment_time || params.appointmentTime,
+          shop_name: params.shop_name || params.shopName,
+        };
+
+        // Show booking in progress
+        setBookingInProgress(true);
         setTranscripts((prev) => [
           ...prev,
           {
-            role: 'system',
-            content: `Booking confirmed: ${JSON.stringify(params)}`,
+            role: 'booking',
+            content: '📅 Processing your appointment booking...',
             timestamp: new Date(),
+            bookingStatus: 'in_progress',
+            bookingData,
           },
         ]);
+
+        // Try to call the webhook to verify booking
+        try {
+          const webhookUrl = `${window.location.origin}/api/webhook/make`;
+
+          const response = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(bookingData),
+          });
+
+          const result = await response.json();
+
+          if (response.ok && result.success) {
+            // Booking successful
+            setTranscripts((prev) => [
+              ...prev,
+              {
+                role: 'booking',
+                content: `✅ Appointment confirmed! ${bookingData.customer_name} - ${bookingData.shop_name} on ${new Date(bookingData.appointment_time || '').toLocaleString()}`,
+                timestamp: new Date(),
+                bookingStatus: 'success',
+                bookingData,
+              },
+            ]);
+          } else {
+            // Booking failed
+            setTranscripts((prev) => [
+              ...prev,
+              {
+                role: 'booking',
+                content: `❌ Booking failed: ${result.error || 'Unknown error'}. Please try again.`,
+                timestamp: new Date(),
+                bookingStatus: 'failed',
+                bookingData,
+              },
+            ]);
+          }
+        } catch (error) {
+          // Error calling webhook
+          console.error('Booking webhook error:', error);
+          setTranscripts((prev) => [
+            ...prev,
+            {
+              role: 'booking',
+              content: `⚠️ Booking request received but confirmation pending. Details: ${bookingData.customer_name} - ${bookingData.shop_name}`,
+              timestamp: new Date(),
+              bookingStatus: 'in_progress',
+              bookingData,
+            },
+          ]);
+        } finally {
+          setBookingInProgress(false);
+        }
       }
     };
 
@@ -276,6 +344,7 @@ export default function VapiProvider({ children, assistantId }: VapiProviderProp
         mute,
         unmute,
         isMuted,
+        bookingInProgress,
       }}
     >
       {children}

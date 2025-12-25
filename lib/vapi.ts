@@ -37,11 +37,11 @@ export interface VapiCallRequest {
 }
 
 export function getConfirmBookingFunction(): VapiFunction {
-  const webhookUrl = process.env.MAKE_COM_WEBHOOK_URL
-    ? process.env.MAKE_COM_WEBHOOK_URL
-    : process.env.NEXTAUTH_URL
-      ? `${process.env.NEXTAUTH_URL}/api/webhook/make`
-      : '';
+  // Always use our Next.js webhook endpoint, which will forward to Make.com
+  // This ensures proper data transformation and error handling
+  const webhookUrl = process.env.NEXTAUTH_URL
+    ? `${process.env.NEXTAUTH_URL}/api/webhook/make`
+    : 'http://localhost:3000/api/webhook/make';
 
   return {
     name: 'confirm_booking',
