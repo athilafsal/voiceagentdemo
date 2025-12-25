@@ -91,16 +91,16 @@ export async function updateAssistant(
       provider: 'openai',
       model: 'gpt-3.5-turbo',
       systemPrompt: persona.systemPrompt,
-      ...(toolId ? { toolIds: [toolId] } : {}),
+      // Don't use toolIds - use functions instead to avoid tool not found errors
+      // ...(toolId ? { toolIds: [toolId] } : {}),
     },
     firstMessage: `Hello there! This is ${persona.assistantName} from ${companyName}. How can I help you today?`,
   };
 
-  // Legacy support: Add the confirm_booking function if requested AND no toolId is present
-  if (includeFunction && !toolId) {
+  // Always use function definition instead of toolId to avoid "tool not found" errors
+  if (includeFunction) {
     updateData.functions = [getConfirmBookingFunction()];
   } else {
-    // Explicitly clear functions if we are using toolIds to avoid conflicts
     updateData.functions = [];
   }
 

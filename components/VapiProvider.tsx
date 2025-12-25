@@ -42,8 +42,22 @@ export default function VapiProvider({ children, assistantId }: VapiProviderProp
       return;
     }
 
-    const client = new Vapi(apiKey);
-    setVapi(client);
+    // Note: API key format may vary - Vapi supports different key formats
+    // The key format check is informational only
+
+    let client: any = null;
+    try {
+      client = new Vapi(apiKey);
+      setVapi(client);
+    } catch (error) {
+      console.error('Failed to initialize Vapi client:', error);
+      return; // Exit early if client creation fails
+    }
+
+    if (!client) {
+      console.error('Vapi client is null');
+      return;
+    }
 
     // Set up event listeners - using any for event names to handle SDK variations
     const handleCallStart = () => {
@@ -84,6 +98,25 @@ export default function VapiProvider({ children, assistantId }: VapiProviderProp
 
     const handleError = (error: any) => {
       console.error('Vapi SDK Error:', error);
+      // Log detailed error information
+      if (error?.error) {
+        console.error('Error details:', error.error);
+        if (error.error.message) {
+          console.error('Error message:', error.error.message);
+        }
+        if (error.error.response) {
+          console.error('Error response:', error.error.response);
+        }
+      }
+      // Show user-friendly error message
+      if (error?.type === 'start-method-error') {
+        const errorMsg = error?.error?.message || 'Unknown error';
+        if (errorMsg.includes('tool') && errorMsg.includes('does not exist')) {
+          alert('Error: The assistant is configured with a tool that doesn\'t exist.\n\nPlease run "Setup Assistant" button to reconfigure the assistant without the invalid tool.');
+        } else {
+          alert(`Failed to start call: ${errorMsg}\n\nPlease check:\n1. Your API key is correct\n2. Your Assistant ID is valid\n3. Your Vapi account is active`);
+        }
+      }
     };
 
     // Use type assertion to handle event name variations
@@ -126,17 +159,66 @@ export default function VapiProvider({ children, assistantId }: VapiProviderProp
       return;
     }
 
+    const apiKey = process.env.NEXT_PUBLIC_VAPI_API_KEY;
+    if (!apiKey) {
+      console.error('NEXT_PUBLIC_VAPI_API_KEY is not set');
+      alert('Vapi API key is not configured. Please check your .env.local file.');
+      return;
+    }
+
+    // Check if API key format is correct (should start with pk_)
+    if (!apiKey.startsWith('pk_')) {
+      console.warn('API key format may be incorrect. Vapi public keys should start with "pk_"');
+    }
+
     console.log('Starting call with Assistant ID:', assistantId);
+    console.log('Using API Key:', apiKey.substring(0, 10) + '...');
 
     try {
-      // Try different method names
+      // For Vapi SDK v2.5.2, try different method signatures
+      // First try: start with assistantId as string (most common)
       if (typeof vapi.start === 'function') {
-        vapi.start(assistantId);
-      } else if (typeof (vapi as any).call === 'function') {
-        (vapi as any).call(assistantId);
+        try {
+          vapi.start(assistantId);
+          return; // Success, exit early
+        } catch (e) {
+          console.log('start(assistantId) failed, trying object format...', e);
+        }
       }
+      
+      // Second try: start with object containing assistantId
+      if (typeof vapi.start === 'function') {
+        try {
+          vapi.start({ assistantId });
+          return;
+        } catch (e) {
+          console.log('start({assistantId}) failed, trying other methods...', e);
+        }
+      }
+      
+      // Third try: startCall method
+      if (typeof (vapi as any).startCall === 'function') {
+        try {
+          (vapi as any).startCall(assistantId);
+          return;
+        } catch (e) {
+          console.log('startCall failed, trying call method...', e);
+        }
+      }
+      
+      // Fourth try: call method
+      if (typeof (vapi as any).call === 'function') {
+        (vapi as any).call(assistantId);
+        return;
+      }
+      
+      // If all methods fail, throw error
+      throw new Error('No valid Vapi start method found. Check SDK version and documentation.');
     } catch (err) {
       console.error('Failed to start call:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Full error details:', err);
+      alert(`Failed to start call: ${errorMessage}\n\nCheck console for details.`);
     }
   }, [vapi, assistantId]);
 
